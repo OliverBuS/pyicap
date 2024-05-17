@@ -38,7 +38,7 @@ class SimpleICAPHandler(BaseICAPRequestHandler):
         self.authorize_func = authorize_func
         super().__init__(request, client_address, server)
 
-    def OPTIONS(self):
+    def dlp_OPTIONS(self):
         self.set_icap_response(200)
         self.set_icap_header(b"Methods", b"REQMOD")
         self.set_icap_header(b"Service", b"SimpleICAP Server 1.0")
@@ -50,7 +50,7 @@ class SimpleICAPHandler(BaseICAPRequestHandler):
         self.set_icap_header(b"Options-TTL", b"3600")
         self.send_headers(False)
 
-    def REQMOD(self):
+    def dlp_REQMOD(self):
         if self.authorize_func and not self.authorize_func(
             self.enc_req, self.enc_req_headers
         ):
@@ -58,15 +58,19 @@ class SimpleICAPHandler(BaseICAPRequestHandler):
             return
 
         self.set_icap_response(200)
+        print("Se seteo la respuesta")
 
         self.set_enc_request(b" ".join(self.enc_req))
         for h in self.enc_req_headers:
             for v in self.enc_req_headers[h]:
                 self.set_enc_header(h, v)
 
+        print("Se pusierons los mismos encabezados con los que vino el paquete")
         if not self.has_body:
             self.send_headers(False)
             return
+
+        print("Tiene cuerpo:", self.has_body)
 
         content = b""
         while True:
@@ -75,13 +79,19 @@ class SimpleICAPHandler(BaseICAPRequestHandler):
                 break
             content += chunk
 
+        print("Se leyo el cuerpo")
+
         if self.analyze_func:
             self.analyze_func(content)
 
+        print("Se leyo la data")
         if self.modify_func:
             content = self.modify_func(content)
 
+        print("Se modifico la data")
+        self.send_headers(True)
         self.write_chunk(content)
+        self.write_chunk(b"")
 
 
 class SimpleICAPServer:
