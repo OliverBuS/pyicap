@@ -7,13 +7,13 @@ from icapserver import (
 
 
 class MyContentAnalyzer(ContentAnalyzer):
-    def analyze(self, content: bytes) -> None:
+    def analyze(self, content: str) -> None:
         print("Analyzing content...")
 
 
 class MyContentModifier(ContentModifier):
-    def modify(self, content: bytes) -> bytes:
-        modified_content = content.replace(b"example", b"modified")
+    def modify(self, content: str) -> str:
+        modified_content = content.replace("example", "modified")
         return modified_content
 
 
