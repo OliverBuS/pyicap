@@ -14,6 +14,7 @@ class MyContentAnalyzer(ContentAnalyzer):
 class MyContentModifier(ContentModifier):
     def modify(self, content: str) -> str:
         modified_content = content.replace("example", "modified")
+        modified_content = modified_content.replace("censor me", "####")
         return modified_content
 
 
