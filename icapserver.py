@@ -1,6 +1,8 @@
 from io import BytesIO
 from socketserver import ThreadingMixIn
 from typing import Callable, Optional
+import traceback
+import logging
 
 import fitz
 from docx import Document
@@ -8,6 +10,11 @@ from PyPDF2 import PdfMerger, PdfReader, PdfWriter
 
 from pyicap import BaseICAPRequestHandler, ICAPServer, native
 
+logging.basicConfig(
+    filename='pyicap.log',
+    level=logging.INFO,        # Set the logging level
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'  # Format of log entries
+)
 
 class ThreadingSimpleServer(ThreadingMixIn, ICAPServer):
     pass
@@ -38,12 +45,13 @@ class FileHandler:
         self.content = content
         self.modify_fun = modify_fun
         self.analyze_fun = analyze_fun
+        self.type = "text"
 
         print(f"Original content: {self.content[-300:]}")
 
         # Split the content based on the boundary string
         boundary = content.split(b"\r\n")[0][2:]
-        parts = content.split(boundary)
+        parts = content.split(boundary) if boundary else [content]
 
         # Find the part containing the file content
         file_part = None
@@ -67,10 +75,7 @@ class FileHandler:
                 self.type = "docx"
                 return
             except Exception:
-                pass
-        else:
-            # Consider the content as a text file
-            self.type = "text"
+                traceback.print_exc()
 
     def modify_content(self) -> bytes:
         if not self.modify_fun:
@@ -151,6 +156,7 @@ class FileHandler:
 
             except Exception as e:
                 print(f"Error modifying PDF: {str(e)}")
+                traceback.print_exc()
                 return self.content
         elif self.type == "docx":
             try:
@@ -184,12 +190,10 @@ class FileHandler:
                 boundary = self.content.split(b"\r\n")[0]
                 modified_content = b""
                 for part in self.content.split(boundary)[:-1]:
-                    print(f"Part: {part[:120]}")
                     if b'filename="' in part:
                         headers, _ = part.split(b"\r\n\r\n", 1)
                         modified_content += (
                             boundary
-                            + b"\r\n"
                             + headers
                             + b"\r\n\r\n"
                             + modified_file_content
@@ -205,6 +209,7 @@ class FileHandler:
 
             except Exception as e:
                 print(f"Error modifying Word document: {str(e)}")
+                traceback.print_exc()
                 return self.content
         else:
             return self.modify_fun(self.content.decode("utf-8")).encode("utf-8")
@@ -234,6 +239,7 @@ class FileHandler:
 
             except Exception as e:
                 print(f"Error analyzing PDF: {str(e)}")
+                traceback.print_exc()
         elif self.type == "docx":
             try:
                 # Create a BytesIO object from the file content
@@ -252,6 +258,7 @@ class FileHandler:
 
             except Exception as e:
                 print(f"Error analyzing Word document: {str(e)}")
+                traceback.print_exc()
         else:
             self.analyze_fun(self.content.decode("utf-8"))
 
@@ -290,16 +297,12 @@ class SimpleICAPHandler(BaseICAPRequestHandler):
             self.send_enc_error(403, message="Forbidden")
             return
 
-        hasContentLength = False
-
         self.set_icap_response(200)
         print("Se seteo la respuesta")
 
         self.set_enc_request(b" ".join(self.enc_req))
         for h in self.enc_req_headers:
             for v in self.enc_req_headers[h]:
-                if h.lower() == b"content-length":
-                    hasContentLength = True
                 self.set_enc_header(h, v)
 
         print("Se pusierons los mismos encabezados con los que vino el paquete")
@@ -334,6 +337,9 @@ class SimpleICAPHandler(BaseICAPRequestHandler):
                 break
             content += chunk
 
+        logging.info("Original request")
+        logging.info(content)
+
         print("Se leyó el cuerpo")
         fileHandler = FileHandler(content, self.modify_func, self.analyze_func)
         print(f"FileHandler type {fileHandler.type}")
@@ -344,14 +350,22 @@ class SimpleICAPHandler(BaseICAPRequestHandler):
         print("Se leyo la data")
         if self.modify_func:
             content = fileHandler.modify_content()
+            logging.info("Modified request")
+            logging.info(content)
 
         print("Se modifico la data")
-        self.set_enc_header(b"Content-Length", str(len(content)).encode("utf-8"))
+        self.set_content_length_header(str(len(content)))
         self.send_headers(True)
         print(f"Sending modified content: {content[:120]}")
         self.write_chunk(content)
         self.write_chunk(b"")
 
+    def set_content_length_header(self, content_length):
+         for h in self.enc_req_headers:
+                for v in self.enc_req_headers[h]:
+                    if h.lower() == b'content-length':
+                        v = str(len(content_length)).encode('utf-8')
+                        self.set_enc_header(h, v)
 
 class SimpleICAPServer:
     def __init__(
