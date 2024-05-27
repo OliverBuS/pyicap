@@ -613,7 +613,7 @@ class BaseICAPRequestHandler(StreamRequestHandler):
         self.set_enc_header(b"Content-Type", contenttype)
         self.set_enc_header(b"Content-Length", str(len(body)).encode("utf-8"))
         self.send_headers(has_body=True)
-        if body:
+        if body and len(body) > 0:
             self.write_chunk(body)
         self.write_chunk(b"")
 
